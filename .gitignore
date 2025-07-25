@@ -1,0 +1,5 @@
+instance/
+__pychache__/
+session/
+dump.rdb
+static/

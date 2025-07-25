@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post History</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <style>
+        .status-pending { color: #FFA500; }
+        .status-success { color: #008000; }
+        .status-failed { color: #FF0000; }
+        .post-card { border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
+        .post-image { max-width: 200px; max-height: 200px; }
+    </style>
+</head>
+<body>
+    <h1>Your Scheduled Posts</h1>
+    
+    <nav>
+        <a href="/dashboard">Schedule New Post</a> |
+        <a href="/logout">Logout</a>
+    </nav>
+    
+    <div id="message" style="display: none;"></div>
+    
+    <div id="posts-container">
+        <!-- Posts will be inserted here by JavaScript -->
+        <p>Loading your post history...</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/history', {
+                headers: { 'Accept': 'application/json' },
+                credentials:"include",
+            })
+            .then(response => response.json())
+            .then(posts => {
+                const postsContainer = document.getElementById('posts-container');
+                postsContainer.innerHTML = ''; // Clear loading message
+
+                if (posts.length === 0) {
+                    postsContainer.innerHTML = '<p>No posts scheduled yet.</p>';
+                    return;
+                }
+
+                posts.forEach(post => {
+                    const postCard = document.createElement('div');
+                    postCard.className = 'post-card';
+
+                    let statusClass = '';
+                    if (post.status === 'scheduled' || post.task_status === 'PENDING' || post.task_status === 'STARTED') {
+                        statusClass = 'status-pending';
+                    } else if (post.status === 'success' || post.task_status === 'SUCCESS') {
+                        statusClass = 'status-success';
+                    } else if (post.status === 'failed' || post.task_status === 'FAILURE') {
+                        statusClass = 'status-failed';
+                    }
+
+                    postCard.innerHTML = `
+                        <h3>Post ID: ${post.id}</h3>
+                        <p><strong>Scheduled Time (Jalali):</strong> ${post.jalali_scheduled}</p>
+                        <p><strong>Caption:</strong> ${post.caption}</p>
+                        <p><strong>Status:</strong> <span class="${statusClass}">${post.status} (${post.task_status || 'N/A'})</span></p>
+                        ${post.error ? `<p style="color: red;"><strong>Error:</strong> ${post.error}</p>` : ''}
+                        ${post.instagram_post_id ? `<p><strong>Instagram Post ID:</strong> ${post.instagram_post_id}</p>` : ''}
+                        ${post.path ? `<img src="/static/${post.path}" alt="Post Image" class="post-image">` : ''}
+                    `;
+                    postsContainer.appendChild(postCard);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching post history:', error);
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = 'Failed to load post history. Please try again.';
+                messageDiv.style = 'display: block; padding: 1rem; margin: 1rem 0; border-radius: 4px; background: #ffebee; color: #b71c1c;';
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const logoutLink = document.querySelector('nav a[href="/logout"]');
+            if (logoutLink) {
+                logoutLink.addEventListener('click', async (e) => {
+                    e.preventDefault(); // Prevent default link behavior
+                    try {
+                        const response = await fetch('http://127.0.0.1:5000/logout', {
+                            method: 'POST',
+                            credentials: 'include'
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            alert(data.message);
+                            window.location.href = 'http://127.0.0.1:5000/login';
+                        } else {
+                            alert(data.message || 'Logout failed.');
+                        }
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                        alert('An error occurred during logout.');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

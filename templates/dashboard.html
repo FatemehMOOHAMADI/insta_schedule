@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+</head>
+<body>
+    <h1>Schedule Instagram Post</h1>
+
+    <nav>
+        <a href="/register">Register</a> |
+        <a href="/logout">Logout</a> |
+        <a href="/dashboard">Schedule New Post</a> | 
+        <a href="/history">View History</a>
+    </nav>
+    
+    <div id="message" style="display: none;"></div>
+    
+    <form id="postForm" enctype="multipart/form-data" style="margin-top: 2rem;">
+        <label for="image">Upload Image</label>
+        <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/jpg, image/gif" required>
+        <div>
+            <img id="preview" src="#" alt="Image Preview" style="display: none; max-width: 100%; margin-top: 1rem;">
+        </div>
+        
+        <label for="caption">Caption</label>
+        <textarea id="caption" name="caption" placeholder="Write your caption here..." required></textarea>
+        
+        <label for="jalali-date">Schedule Date (Jalali)</label>
+        <input type="text" id="jalali-date" name="jalali_date" required>
+        <small style="display: block; margin-bottom: 1rem; color: #666;">
+            Example: 1403-04-20 (Click to open calendar)
+        </small>
+
+        <label for="schedule-time">Schedule Time</label>
+        <input type="time" id="schedule-time" name="schedule_time" required>
+        <small style="display: block; margin-bottom: 1rem; color: #666;">
+            Example: 14:30 (24-hour format)
+        </small>
+
+
+        
+        <button type="submit">Schedule Post</button>
+    </form>
+
+    <script>
+        // Display image preview when file is selected
+        document.getElementById('image').addEventListener('change', function(e) {
+            const preview = document.getElementById('preview');
+            const file = e.target.files[0];
+            
+            if (file) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                }
+                
+                reader.readAsDataURL(file);
+            } else {
+                preview.style.display = 'none';
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('postForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const messageDiv = document.getElementById('message');
+
+            console.log(formData)
+            
+            try {
+                const response = await fetch('http://127.0.0.1:5000/dashboard', {
+                    method: 'POST',
+                    body: formData,
+                    credentials:"include"
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let successMsg = result.message;
+                    if (result.jalali_scheduled) {
+                        successMsg += ` for ${result.jalali_scheduled}`;
+                    }
+                    showMessage(successMsg, 'background: #e6f9e6; color: #006400;');
+                    // Reset form on success
+
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5000/history';
+                    }, 1500);
+
+                    document.getElementById('postForm').reset();
+                    document.getElementById('preview').style.display = 'none';
+                } else {
+                    showMessage(result.message || 'Error scheduling post', 'background: #ffebee; color: #b71c1c;');
+                }
+            } catch (error) {
+                showMessage('An error occurred. Please try again.', 'background: #ffebee; color: #b71c1c;');
+                console.error('Error:', error);
+            }
+        });
+
+        // Helper function to show messages
+        function showMessage(text, style) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.style = `display: block; padding: 1rem; margin: 1rem 0; border-radius: 4px; ${style}`;
+            
+            // Hide message after 5 seconds
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Set minimum datetime to current time
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait a tiny bit longer to ensure all scripts are ready
+            setTimeout(function() {
+                $("#jalali-date").pDatepicker({
+                    format: "YYYY-MM-DD",
+                    autoClose: true,
+                    initialValue: false
+                });
+            }, 100);
+        });
+
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const logoutLink = document.querySelector('nav a[href="/logout"]');
+            if (logoutLink) {
+                logoutLink.addEventListener('click', async (e) => {
+                    e.preventDefault(); // Prevent default link behavior
+                    try {
+                        const response = await fetch('http://127.0.0.1:5000/logout', {
+                            method: 'POST',
+                            credentials: 'include'
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            alert(data.message);
+                            window.location.href = 'http://127.0.0.1:5000/login';
+                        } else {
+                            alert(data.message || 'Logout failed.');
+                        }
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                        alert('An error occurred during logout.');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
