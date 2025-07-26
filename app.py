@@ -328,6 +328,48 @@ class UserHistory(Resource):
             return posts_data, 200
 
 
+class UserPostDelete(Resource):
+
+    """
+    this route is for deleting posts
+    """
+
+    method_decorators = {
+        'delete': [jwt_required()],
+    }
+
+    def delete(self, post_id):
+        user_id = get_jwt_identity()
+        current_user_obj = Users.query.get(user_id)
+
+        if not current_user_obj:
+            return {"message": "user not FOUND!"}, 404
+
+        post_to_delete = Post_insta.filter_by(id=post_id, user_id=user_id).first()
+
+        if not post_to_delete:
+            return {"message": "post not found"}, 404
+
+        try:
+            if post_to_delete.path and os.path.exists(os.path.join(app.static_folder, post_to_delete.path)):
+                os.remove(os.path.join(app.static_folder, post_to_delete.path))
+
+            if post_to_delete.status == "scheduled" and post_to_delete.task_id:
+                celery.control.revoke(post_to_delete.task_id, terminate=True)
+                app.logger.info(f"Revoke Celery task {post_to_delete.task_id} for delete post {post_id}")
+
+            db.session.delete(post_to_delete)
+            db.session.commit()
+
+            app.logger.info(f"post {post_id} deleted by user {user_id}")
+            return {"message": "post deleted successfully"}, 200
+
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"error deleting post {post_id}: {str(e)}")
+            return {"message": f"error deleting post {post_id}: {str(e)}"}, 400
+
+
 class UserLogout(Resource):
     """
     logout route
@@ -350,11 +392,12 @@ api.add_resource(UserRegister, '/')
 api.add_resource(UserLogin, '/login')
 api.add_resource(UserLogout, '/logout')
 # api.add_resource(UserDashboard, '/dashboard')
-api.add_resource(UserDashboard, '/client/<string:user_name>/dashboard')
+api.add_resource(UserDashboard, '/<string:user_name>/dashboard')
 # see what everybody has uploaded
 api.add_resource(UserHistory, '/history')
 # each user only can see what they have done
-api.add_resource(UserHistory, '/client/<string:user_name>/history')
+api.add_resource(UserHistory, '/<string:user_name>/history')
+api.add_resource(UserPostDelete, '/<int:post_id>/delete')
 
 
 @app.errorhandler(JWTExtendedException)
