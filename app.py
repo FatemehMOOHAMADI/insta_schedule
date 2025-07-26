@@ -370,6 +370,85 @@ class UserPostDelete(Resource):
             return {"message": f"error deleting post {post_id}: {str(e)}"}, 400
 
 
+class UserPostEdit(Resource):
+    """
+    this route is for editing the posts
+    """
+
+    method_decorators = {
+        'put': [jwt_required()]
+    }
+
+    def put(self, post_id):
+        user_id = get_jwt_identity()
+        current_user_obj = Users.query.get(user_id)
+
+        if not current_user_obj:
+            return {"message": "user not found"}, 404
+
+        post_to_edit = Post_insta.query.filter_by(id=post_id, user_id=user_id).first()
+
+        if not post_to_edit:
+            return {"message": "no post found to edit"}, 403
+
+        data = request.form
+
+        if "photo" in request.files:
+            file = request.files["photo"]
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                new_image_path = os.path.join(UPLOAD_FOLDER, filename)
+
+                try:
+                    if post_to_edit.path and os.path.exists(post_to_edit.path):
+                        os.remove(post_to_edit.path)
+                        app.logger.info(f"remove old image: {post_to_edit.path}")
+
+                    file.save(new_image_path)
+                    post_to_edit.path = new_image_path
+
+                    app.logger.info(f"new image saved for post {post_id}: {new_image_path}")
+
+                except Exception as e:
+                    return {"message": f"error saving the edited photo: {str(e)}"}, 400
+
+            else:
+                return {"message": "invalid file"}, 400
+
+        if "caption" in data and data["caption"] is not None:
+            post_to_edit.caption = data["caption"]
+
+        jalali_date = data.get("jalali_date")
+        schedule_time = data.get("schedule_time")
+
+        if jalali_date and schedule_time:
+            try:
+                new_schedule_time = convert_jalali_to_gregorian(jalali_date, schedule_time)
+
+                is_schedule_changed = post_to_edit.schedule_time != new_schedule_time
+                is_image_changed = "photo" in request.files
+
+                if (post_to_edit.status == "scheduled" and post_to_edit.task_id and
+                        (is_schedule_changed or is_image_changed)):
+                    celery.control.revoke(post_to_edit.task_id, terminate=True)
+                    app.logger.info(f"revoke the celery task {post_to_edit.task_id} for post {post_id}")
+
+            except Exception as e:
+                return {"message": f"Invalid date or time format: {str(e)}"}, 400
+
+        elif (jalali_date and not schedule_time) or (not jalali_date and schedule_time):
+            return {"message": "Both 'jalali_date' and 'schedule_time' must be provided to update schedule."}, 400
+
+        try:
+            db.session.commit()
+            app.logger.info(f"Post {post_id} updated by user {user_id}")
+            return {"message": "Post updated successfully", "post": post_to_edit.to_json()}, 200
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Error updating post {post_id}: {str(e)}")
+            return {"message": f"Error updating post: {str(e)}"}, 400
+
+
 class UserLogout(Resource):
     """
     logout route
@@ -398,6 +477,7 @@ api.add_resource(UserHistory, '/history')
 # each user only can see what they have done
 api.add_resource(UserHistory, '/<string:user_name>/history')
 api.add_resource(UserPostDelete, '/<int:post_id>/delete')
+api.add_resource(UserPostEdit, '/<int:post_id>/edit')
 
 
 @app.errorhandler(JWTExtendedException)
