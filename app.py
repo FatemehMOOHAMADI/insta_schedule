@@ -164,7 +164,16 @@ class UserDashboard(Resource):
         'post': [jwt_required()],
     }
 
-    def get(self):
+    def get(self, user_name):
+        current_user_id = get_jwt_identity()
+        current_user_obj = Users.query.get(current_user_id)
+
+        if not current_user_obj:
+            return {"message": "user not FOUND!"}, 404
+
+        if current_user_obj.user_name != user_name:
+            return {"message": "Access denied, you are not the user"}, 403
+
         if request.accept_mimetypes.accept_html:
             app.logger.info("get the dashboard.html")
             return send_file('templates/dashboard.html')
@@ -340,8 +349,12 @@ class UserLogout(Resource):
 api.add_resource(UserRegister, '/')
 api.add_resource(UserLogin, '/login')
 api.add_resource(UserLogout, '/logout')
-api.add_resource(UserDashboard, '/dashboard')
+# api.add_resource(UserDashboard, '/dashboard')
+api.add_resource(UserDashboard, '/client/<string:user_name>/dashboard')
+# see what everybody has uploaded
 api.add_resource(UserHistory, '/history')
+# each user only can see what they have done
+api.add_resource(UserHistory, '/client/<string:user_name>/history')
 
 
 @app.errorhandler(JWTExtendedException)
