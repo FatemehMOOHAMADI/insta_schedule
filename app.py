@@ -21,6 +21,15 @@ def convert_jalali_to_gregorian(jalali_date_str, time_str):
     return localized_datetime
 
 
+# allowed extensions for the images in app
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+
+# specify the allowed files, both useful in dashboard and edit module
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 class UserRegister(Resource):
     """
     register the users
@@ -213,17 +222,12 @@ class UserDashboard(Resource):
 
         try:
 
-            ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
             # save the photos that user sends in a folder
             filename = secure_filename(file.filename)
             upload_folder = os.path.join(app.static_folder, 'uploads')
             os.makedirs(upload_folder, exist_ok=True)
             file_path = os.path.join(upload_folder, filename)
             relative_path = os.path.join('uploads', filename)
-
-            def allowed_file(filename):
-                return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
             if not allowed_file(file.filename):
                 return {"message": "invalid file type"}, 400
@@ -283,6 +287,7 @@ class UserHistory(Resource):
         for post in user_posts:
 
             current_post_error = None
+            post_status_updated = False
 
             # Check Celery task status if task_id exists
             if post.task_id and post.status == "scheduled":
@@ -298,8 +303,14 @@ class UserHistory(Resource):
                         post.status = "failed"
                         current_post_error = str(task.result)
 
-                    # store the tasks on database
-                    db.session.commit()
+                    post_status_updated = True
+
+                if post_status_updated:
+                    try:
+                        db.session.commit()
+                    except Exception as e:
+                        app.logger.info(f"error committing post status update for post {post.id}: {str(e)}")
+                        db.session.rollback()
 
             post_data = post.to_json()
 
@@ -345,7 +356,7 @@ class UserPostDelete(Resource):
         if not current_user_obj:
             return {"message": "user not FOUND!"}, 404
 
-        post_to_delete = Post_insta.filter_by(id=post_id, user_id=user_id).first()
+        post_to_delete = Post_insta.query.filter_by(id=post_id, user_id=user_id).first()
 
         if not post_to_delete:
             return {"message": "post not found"}, 404
@@ -397,17 +408,19 @@ class UserPostEdit(Resource):
             file = request.files["photo"]
             if file and allowed_file(file.filename):
                 filename = secure_filename(file.filename)
-                new_image_path = os.path.join(UPLOAD_FOLDER, filename)
+                upload_folder = os.path.join(app.static_folder, 'uploads')
+                new_relative_path = os.path.join('uploads', filename)
+                new_full_path = os.path.join(app.static_folder, new_relative_path)
 
                 try:
-                    if post_to_edit.path and os.path.exists(post_to_edit.path):
-                        os.remove(post_to_edit.path)
+                    if post_to_edit.path and os.path.exists(os.path.join(app.static_folder, post_to_edit.path)):
+                        os.remove(os.path.join(app.static_folder, post_to_edit.path))
                         app.logger.info(f"remove old image: {post_to_edit.path}")
 
-                    file.save(new_image_path)
-                    post_to_edit.path = new_image_path
+                    file.save(new_full_path)
+                    post_to_edit.path = new_full_path
 
-                    app.logger.info(f"new image saved for post {post_id}: {new_image_path}")
+                    app.logger.info(f"new image saved for post {post_id}: {new_full_path}")
 
                 except Exception as e:
                     return {"message": f"error saving the edited photo: {str(e)}"}, 400
@@ -472,8 +485,6 @@ api.add_resource(UserLogin, '/login')
 api.add_resource(UserLogout, '/logout')
 # api.add_resource(UserDashboard, '/dashboard')
 api.add_resource(UserDashboard, '/<string:user_name>/dashboard')
-# see what everybody has uploaded
-api.add_resource(UserHistory, '/history')
 # each user only can see what they have done
 api.add_resource(UserHistory, '/<string:user_name>/history')
 api.add_resource(UserPostDelete, '/<int:post_id>/delete')
