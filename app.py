@@ -3,7 +3,7 @@ from config import (app, db, Resource, api, request, create_access_token, jwt_re
                     make_response, send_file, tehran, os, get_jwt_identity, jsonify)
 from models import Users, generate_password_hash, check_password_hash, Post_insta
 from flask_jwt_extended import unset_jwt_cookies
-from tasks import upload_to_instagram
+from tasks import upload_to_instagram, delete_instagram_post
 from datetime import datetime
 from celery_worker import celery
 from werkzeug.utils import secure_filename
@@ -36,12 +36,8 @@ class UserRegister(Resource):
     """
 
     def get(self):
-        if request.accept_mimetypes.accept_html:
-            app.logger.info("get the register.html")
-            return send_file('templates/register.html')
-        else:
-            app.logger.info("try post request")
-            return {"message": "Use Post request"}
+        app.logger.info("access register route")
+        return {"message": "this form is registering users"}, 200
 
     def post(self):
         data = request.get_json()
@@ -114,12 +110,8 @@ class UserLogin(Resource):
     """
 
     def get(self):
-        if request.accept_mimetypes.accept_html:
-            app.logger.info("getting login.html")
-            return send_file('templates/login.html')
-        else:
-            app.logger.info("try Post request")
-            return {"message": "Use Post request"}
+        app.logger.info("get the login page")
+        return {"message": "access to login page"}, 200
 
     def post(self):
         data = request.get_json()
@@ -170,6 +162,7 @@ class UserDashboard(Resource):
     """
 
     method_decorators = {
+        'get': [jwt_required()],
         'post': [jwt_required()],
     }
 
@@ -183,20 +176,16 @@ class UserDashboard(Resource):
         if current_user_obj.user_name != user_name:
             return {"message": "Access denied, you are not the user"}, 403
 
-        if request.accept_mimetypes.accept_html:
-            app.logger.info("get the dashboard.html")
-            return send_file('templates/dashboard.html')
-        else:
-            app.logger.info("try post request")
-            return {"message": "Use Post request"}, 400
+        app.logger.info("GET request to UserDashboard. Instructing to use POST for actions.")
+        return {"message": "access dashboard"}, 200
 
-    def post(self):
+    def post(self, user_name):
 
         user_id = get_jwt_identity()
         current_user_obj = Users.query.get(user_id)
 
         if not current_user_obj:
-            return {"message": "user not found"}, 404
+            return {"message": "user not FOUND!"}, 404
 
         # receive the image
         if 'image' not in request.files:
@@ -274,10 +263,14 @@ class UserHistory(Resource):
         'get': [jwt_required()],
     }
 
-    def get(self):
+    def get(self, user_name):
 
         # identify the user
         user_id = get_jwt_identity()
+        current_user_obj = Users.query.get(user_id)
+
+        if not current_user_obj:
+            return {"message": "user not FOUND!"}, 404
 
         # get the post information from database
         user_posts = Post_insta.query.filter_by(user_id=user_id).order_by(Post_insta.schedule_time.desc()).all()
@@ -332,11 +325,8 @@ class UserHistory(Resource):
 
             posts_data.append(post_data)
 
-        # return html
-        if request.accept_mimetypes.accept_html:
-            return send_file('templates/history.html')
-        else:
-            return posts_data, 200
+        app.logger.info("get the history page")
+        return posts_data, 200
 
 
 class UserPostDelete(Resource):
@@ -364,10 +354,18 @@ class UserPostDelete(Resource):
         try:
             if post_to_delete.path and os.path.exists(os.path.join(app.static_folder, post_to_delete.path)):
                 os.remove(os.path.join(app.static_folder, post_to_delete.path))
+                app.logger.info(f"Local file {post_to_delete.path} deleted.")
 
             if post_to_delete.status == "scheduled" and post_to_delete.task_id:
                 celery.control.revoke(post_to_delete.task_id, terminate=True)
                 app.logger.info(f"Revoke Celery task {post_to_delete.task_id} for delete post {post_id}")
+
+            if post_to_delete.status == "success" and post_to_delete.instagram_post_id:
+                delete_instagram_post.apply_async(
+                    args=[post_to_delete.instagram_post_id, current_user_obj.username_insta,
+                          current_user_obj.password_insta]
+                )
+                app.logger.info(f"Scheduled deletion of Instagram post {post_to_delete.instagram_post_id}.")
 
             db.session.delete(post_to_delete)
             db.session.commit()
@@ -403,56 +401,81 @@ class UserPostEdit(Resource):
             return {"message": "no post found to edit"}, 403
 
         data = request.form
+        file = request.files.get("photo")
 
-        if "photo" in request.files:
-            file = request.files["photo"]
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                upload_folder = os.path.join(app.static_folder, 'uploads')
-                new_relative_path = os.path.join('uploads', filename)
-                new_full_path = os.path.join(app.static_folder, new_relative_path)
+        needs_reschedule = False
+        old_instagram_post_id = None
 
-                try:
-                    if post_to_edit.path and os.path.exists(os.path.join(app.static_folder, post_to_edit.path)):
-                        os.remove(os.path.join(app.static_folder, post_to_edit.path))
-                        app.logger.info(f"remove old image: {post_to_edit.path}")
+        if file and allowed_file(file.filename):
+            if post_to_edit.path and os.path.exists(os.path.join(app.static_folder, post_to_edit.path)):
+                os.remove(os.path.join(app.static_folder, post_to_edit.path))
+                app.logger.info(f"Removed old image: {post_to_edit.path}")
 
-                    file.save(new_full_path)
-                    post_to_edit.path = new_full_path
+            filename = secure_filename(file.filename)
+            upload_folder = os.path.join(app.static_folder, 'uploads')
+            new_relative_path = os.path.join('uploads', filename)
+            new_full_path = os.path.join(app.static_folder, new_relative_path)
 
-                    app.logger.info(f"new image saved for post {post_id}: {new_full_path}")
-
-                except Exception as e:
-                    return {"message": f"error saving the edited photo: {str(e)}"}, 400
-
-            else:
-                return {"message": "invalid file"}, 400
-
-        if "caption" in data and data["caption"] is not None:
-            post_to_edit.caption = data["caption"]
-
-        jalali_date = data.get("jalali_date")
-        schedule_time = data.get("schedule_time")
-
-        if jalali_date and schedule_time:
             try:
-                new_schedule_time = convert_jalali_to_gregorian(jalali_date, schedule_time)
+                file.save(new_full_path)
+                post_to_edit.path = new_relative_path
+                needs_reschedule = True
 
-                is_schedule_changed = post_to_edit.schedule_time != new_schedule_time
-                is_image_changed = "photo" in request.files
-
-                if (post_to_edit.status == "scheduled" and post_to_edit.task_id and
-                        (is_schedule_changed or is_image_changed)):
-                    celery.control.revoke(post_to_edit.task_id, terminate=True)
-                    app.logger.info(f"revoke the celery task {post_to_edit.task_id} for post {post_id}")
+                app.logger.info(f"new image saved for post {post_id}: {new_full_path}")
 
             except Exception as e:
-                return {"message": f"Invalid date or time format: {str(e)}"}, 400
+                return {"message": f"error saving the edited photo: {str(e)}"}, 400
 
-        elif (jalali_date and not schedule_time) or (not jalali_date and schedule_time):
+        elif file:  # file exists but not allowed
+            return {"message": "Invalid file type for photo"}, 400
+
+        if "caption" in data and data["caption"] is not None and data["caption"] != post_to_edit.caption:
+            post_to_edit.caption = data["caption"]
+            needs_reschedule = True
+
+        jalali_date = data.get("jalali_date")
+        time_str = data.get("schedule_time")
+        new_schedule_time = None
+
+        if jalali_date and time_str:
+            try:
+                new_schedule_time = convert_jalali_to_gregorian(jalali_date, time_str)
+                if post_to_edit.schedule_time != new_schedule_time:
+                    post_to_edit.schedule_time = new_schedule_time
+                    needs_reschedule = True
+            except Exception as e:
+                return {"message": f"Invalid date or time format: {str(e)}"}, 400
+        elif (jalali_date and not time_str) or (not jalali_date and time_str):
             return {"message": "Both 'jalali_date' and 'schedule_time' must be provided to update schedule."}, 400
 
         try:
+            if needs_reschedule:
+                if post_to_edit.task_id and post_to_edit.status == "scheduled":
+                    celery.control.revoke(post_to_edit.task_id, terminate=True)
+                    app.logger.info(f"Revoked old Celery task {post_to_edit.task_id} for post {post_id}")
+
+                if post_to_edit.status == "success" and post_to_edit.instagram_post_id:
+                    old_instagram_post_id = post_to_edit.instagram_post_id
+                    delete_instagram_post.apply_async(
+                        args=[old_instagram_post_id, current_user_obj.username_insta, current_user_obj.password_insta]
+                    )
+                    app.logger.info(
+                        f"Scheduled deletion of old Instagram post {old_instagram_post_id} for post {post_id}.")
+                    post_to_edit.instagram_post_id = None  # Clear old Instagram ID
+
+                # Schedule a new upload task
+                if post_to_edit.path and post_to_edit.caption and post_to_edit.schedule_time:
+                    new_task = upload_to_instagram.apply_async(
+                        args=[post_to_edit.path, post_to_edit.caption, current_user_obj.username_insta,
+                              current_user_obj.password_insta],
+                        eta=post_to_edit.schedule_time,
+                    )
+                    post_to_edit.task_id = new_task.id
+                    post_to_edit.status = "scheduled"
+                    app.logger.info(f"New Celery task {new_task.id} scheduled for post {post_id}")
+                else:
+                    return {"message": "Cannot reschedule post: missing image, caption or schedule time."}, 400
+
             db.session.commit()
             app.logger.info(f"Post {post_id} updated by user {user_id}")
             return {"message": "Post updated successfully", "post": post_to_edit.to_json()}, 200
@@ -485,7 +508,6 @@ api.add_resource(UserLogin, '/login')
 api.add_resource(UserLogout, '/logout')
 # api.add_resource(UserDashboard, '/dashboard')
 api.add_resource(UserDashboard, '/<string:user_name>/dashboard')
-# each user only can see what they have done
 api.add_resource(UserHistory, '/<string:user_name>/history')
 api.add_resource(UserPostDelete, '/<int:post_id>/delete')
 api.add_resource(UserPostEdit, '/<int:post_id>/edit')

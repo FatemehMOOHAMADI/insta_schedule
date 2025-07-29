@@ -11,6 +11,26 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 logger = logging.getLogger(__name__)
 
 
+def _get_instagram_client(username, password):
+    client = Client()
+    session_dir = "sessions"
+    os.makedirs(session_dir, exist_ok=True)
+    session_file = os.path.join(session_dir, f"{username}.json")
+
+    if os.path.exists(session_file):
+        try:
+            client.load_settings(session_file)
+            client.login(username, password)
+        except Exception as e:
+            logger.warning(f"Failed to load or use session for {username}: {e}. Attempting full login.")
+            client.login(username, password)
+            client.dump_settings(session_file)
+    else:
+        client.login(username, password)
+        client.dump_settings(session_file)
+    return client
+
+
 @celery.task(bind=True, retry=3, retry_backoff=True)
 def upload_to_instagram(self, relative_path_image, caption, username, password):
     try:
@@ -20,24 +40,7 @@ def upload_to_instagram(self, relative_path_image, caption, username, password):
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Image file not found at {abs_path}")
 
-        client = Client()
-
-        session_dir = f"sessions"
-        os.makedirs(session_dir, exist_ok=True)
-        session_file = os.path.join(session_dir, f"{username}.json")
-
-        if os.path.exists(session_file):
-            try:
-                client.load_settings(session_file)
-                client.login(username, password)
-            except Exception as e:
-                logger.warning(f"Failed to load or use session for {username}: {e}. Attempting full login.")
-                client.login(username, password)
-                client.dump_settings(session_file)
-
-        else:
-            client.login(username, password)
-            client.dump_settings(session_file)
+        client = _get_instagram_client(username, password)
 
         post_id = client.photo_upload(path=abs_path, caption=caption)
         return {
@@ -49,4 +52,33 @@ def upload_to_instagram(self, relative_path_image, caption, username, password):
 
     except Exception as e:
         logger.error(f"the uploading failed {str(e)}")
+        raise self.retry(exc=e, countdown=60)
+
+
+@celery.task(bind=True, retry=3, retry_backoff=True)
+def delete_instagram_post(self, media_id, username, password):
+    try:
+        client = _get_instagram_client(username, password)
+
+        success = client.media_delete(media_id=media_id)
+
+        if success:
+            logger.info(f"Successfully deleted media {media_id} for {username}")
+            return {
+                "success": True,
+                "message": "Instagram post deleted successfully",
+                "media_id": media_id,
+                "username": username,
+            }
+        else:
+            logger.warning(f"Failed to delete media {media_id} for {username}: Method returned false.")
+            return {
+                "success": False,
+                "message": "Failed to delete Instagram post",
+                "media_id": media_id,
+                "username": username,
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to delete Instagram post for media {media_id} ({username}): {str(e)}")
         raise self.retry(exc=e, countdown=60)
