@@ -29,47 +29,54 @@
 
   <script>
     document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Clear previous errors
-            document.querySelectorAll('.error').forEach(el => el.textContent = '');
-            
-            const formData = {
-                user_name: document.getElementById('user_name').value,
-                password: document.getElementById('password').value
-            };
-            
-            try {
-                const response = await fetch('http://127.0.0.1:5000/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(formData),
-                    credentials: 'include'
-                });
-                
-                const data = await response.json();
-                
-                if (response.status === 200) {
-                    alert('Login successful!');
-                    // Redirect to home page or dashboard after login
-                    window.location.href = 'http://127.0.0.1:5000/dashboard';
+        e.preventDefault();
+    
+        // Clear previous errors
+        document.querySelectorAll('.error').forEach(el => el.textContent = '');
+    
+        const formData = {
+            user_name: document.getElementById('user_name').value,
+            password: document.getElementById('password').value
+        };
+    
+        try {
+            const response = await fetch('http://localhost:5000/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData),
+                credentials: 'include'
+            });
+    
+            const data = await response.json(); // Data contains message, access_token, user_id, user_name
+    
+            if (response.status === 200) {
+                // Use showMessage for consistent feedback
+                showMessage('Login successful! Redirecting...', 'background: #e6f9e6; color: #006400;');
+    
+                // CRITICAL FIX: Store the user_name from the response
+                localStorage.setItem("user_name", data.user_name); 
+    
+                // Redirect to the user's specific dashboard URL
+                setTimeout(() => {
+                    window.location.href = `http://localhost:5000/${data.user_name}/dashboard`;
+                }, 1500); // Delay for message to be seen
+            } else {
+                // Handle errors consistently using showMessage
+                if (data.message.includes('user name') || data.message.includes('user not found')) { // Adjusted message check
+                    document.getElementById('usernameError').textContent = data.message;
+                } else if (data.message.includes('password')) {
+                    document.getElementById('passwordError').textContent = data.message;
                 } else {
-                    // Handle errors
-                    if (data.message.includes('user_name')) {
-                        document.getElementById('usernameError').textContent = data.message;
-                    } else if (data.message.includes('password')) {
-                        document.getElementById('passwordError').textContent = data.message;
-                    } else {
-                        alert(data.message);
-                    }
+                    showMessage(data.message || 'Login failed.', 'background: #ffebee; color: #b71c1c;');
                 }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('An error occurred during login');
             }
-        });
+        } catch (error) {
+            console.error('Error:', error);
+            showMessage('An error occurred during login. Please try again.', 'background: #ffebee; color: #b71c1c;');
+        }
+    });
   </script>
 </body>
 </html>

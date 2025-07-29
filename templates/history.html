@@ -6,38 +6,67 @@
     <title>Post History</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
     <style>
-        .status-pending { color: #FFA500; }
+        .status-scheduled, .status-pending { color: #FFA500; }
         .status-success { color: #008000; }
         .status-failed { color: #FF0000; }
         .post-card { border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
-        .post-image { max-width: 200px; max-height: 200px; }
+        .post-image { max-width: 200px; max-height: 200px; object-fit: contain; display: block; margin-top: 1rem;}
+        .actions button { margin-right: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
+        .edit-form { margin-top: 1rem; border-top: 1px dashed #ccc; padding-top: 1rem; }
     </style>
 </head>
 <body>
     <h1>Your Scheduled Posts</h1>
     
     <nav>
-        <a href="/dashboard">Schedule New Post</a> |
-        <a href="/logout">Logout</a>
+        <a href="/" id="registerLink">Register</a> |
+        <a href="/logout" id="logoutLink">Logout</a> |
+        <a href="#" id="dashboardLink">Schedule New Post</a> | 
+        <a href="#" id="historyLink">View History</a>
     </nav>
     
     <div id="message" style="display: none;"></div>
     
     <div id="posts-container">
-        <!-- Posts will be inserted here by JavaScript -->
         <p>Loading your post history...</p>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            fetch('/history', {
-                headers: { 'Accept': 'application/json' },
-                credentials:"include",
-            })
-            .then(response => response.json())
-            .then(posts => {
+        // Helper function to show messages
+        function showMessage(text, style) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.style = `display: block; padding: 1rem; margin: 1rem 0; border-radius: 4px; ${style}`;
+            
+            // Hide message after 5 seconds
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        async function fetchPosts() {
+            const userName = localStorage.getItem("user_name");
+            if (!userName) {
+                showMessage('You are not logged in. Redirecting to login...', 'background: #ffebee; color: #b71c1c;');
+                document.getElementById('posts-container').innerHTML = '<p>Please log in to view your post history.</p>';
+                setTimeout(() => { window.location.href = 'http://localhost:5000/login'; }, 1500);
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:5000/${userName}/history`, { // Corrected URL
+                    headers: { 'Accept': 'application/json' },
+                    credentials: "include",
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to fetch post history.');
+                }
+
+                const posts = await response.json();
                 const postsContainer = document.getElementById('posts-container');
-                postsContainer.innerHTML = ''; // Clear loading message
+                postsContainer.innerHTML = '';
 
                 if (posts.length === 0) {
                     postsContainer.innerHTML = '<p>No posts scheduled yet.</p>';
@@ -47,10 +76,12 @@
                 posts.forEach(post => {
                     const postCard = document.createElement('div');
                     postCard.className = 'post-card';
+                    postCard.dataset.postId = post.id; // Store post ID for actions
 
                     let statusClass = '';
+                    // Prioritize backend `status` then `task_status` for display
                     if (post.status === 'scheduled' || post.task_status === 'PENDING' || post.task_status === 'STARTED') {
-                        statusClass = 'status-pending';
+                        statusClass = 'status-scheduled';
                     } else if (post.status === 'success' || post.task_status === 'SUCCESS') {
                         statusClass = 'status-success';
                     } else if (post.status === 'failed' || post.task_status === 'FAILURE') {
@@ -65,32 +96,167 @@
                         ${post.error ? `<p style="color: red;"><strong>Error:</strong> ${post.error}</p>` : ''}
                         ${post.instagram_post_id ? `<p><strong>Instagram Post ID:</strong> ${post.instagram_post_id}</p>` : ''}
                         ${post.path ? `<img src="/static/${post.path}" alt="Post Image" class="post-image">` : ''}
+                        <div class="actions">
+                            <button class="delete-btn" data-id="${post.id}">Delete</button>
+                            <button class="edit-btn" data-id="${post.id}">Edit</button>
+                        </div>
+                        <div id="edit-form-${post.id}" class="edit-form" style="display: none;">
+                            <h4>Edit Post ${post.id}</h4>
+                            <form id="editPostForm-${post.id}" enctype="multipart/form-data">
+                                <label for="edit-image-${post.id}">Change Image (optional)</label>
+                                <input type="file" id="edit-image-${post.id}" name="photo" accept="image/png, image/jpeg, image/jpg, image/gif">
+                                <img id="edit-preview-${post.id}" src="/static/${post.path}" alt="Current Image" style="max-width: 150px; max-height: 150px; ${post.path ? 'display: block;' : 'display: none;'} margin-top: 0.5rem;">
+
+                                <label for="edit-caption-${post.id}">New Caption</label>
+                                <textarea id="edit-caption-${post.id}" name="caption">${post.caption || ''}</textarea>
+
+                                <label for="edit-jalali-date-${post.id}">New Schedule Date (Jalali)</label>
+                                <input type="text" id="edit-jalali-date-${post.id}" name="jalali_date" value="${post.jalali_scheduled ? post.jalali_scheduled.split(' ')[0] : ''}">
+
+                                <label for="edit-schedule-time-${post.id}">New Schedule Time</label>
+                                <input type="time" id="edit-schedule-time-${post.id}" name="schedule_time" value="${post.jalali_scheduled ? post.jalali_scheduled.split(' ')[1] : ''}">
+                                
+                                <button type="submit">Save Changes</button>
+                                <button type="button" class="cancel-edit-btn" data-id="${post.id}">Cancel</button>
+                            </form>
+                        </div>
                     `;
                     postsContainer.appendChild(postCard);
+
+                    // Initialize datepicker for edit form
+                    $(`#edit-jalali-date-${post.id}`).pDatepicker({
+                        format: "YYYY-MM-DD",
+                        autoClose: true,
+                        initialValue: false
+                    });
+
+                    // Add image preview for edit form
+                    document.getElementById(`edit-image-${post.id}`).addEventListener('change', function(e) {
+                        const preview = document.getElementById(`edit-preview-${post.id}`);
+                        const file = e.target.files[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                preview.src = e.target.result;
+                                preview.style.display = 'block';
+                            }
+                            reader.readAsDataURL(file);
+                        } else {
+                            // If user clears selection, revert to existing image or hide
+                            preview.src = `/static/${post.path}`; // Revert to original
+                            if (!post.path) preview.style.display = 'none';
+                        }
+                    });
                 });
-            })
-            .catch(error => {
+
+                attachEventListeners(); // Attach event listeners after posts are rendered
+            } catch (error) {
                 console.error('Error fetching post history:', error);
-                const messageDiv = document.getElementById('message');
-                messageDiv.textContent = 'Failed to load post history. Please try again.';
-                messageDiv.style = 'display: block; padding: 1rem; margin: 1rem 0; border-radius: 4px; background: #ffebee; color: #b71c1c;';
+                showMessage(`Failed to load post history: ${error.message}`, 'background: #ffebee; color: #b71c1c;');
+            }
+        }
+
+        function attachEventListeners() {
+            // Delete Post
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const postId = e.target.dataset.id;
+                    if (!confirm(`Are you sure you want to delete post ${postId}?`)) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`http://localhost:5000/${postId}/delete`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        });
+                        const result = await response.json();
+                        if (response.ok) {
+                            showMessage(result.message, 'background: #e6f9e6; color: #006400;');
+                            fetchPosts(); // Refresh posts after deletion
+                        } else {
+                            showMessage(result.message || 'Failed to delete post.', 'background: #ffebee; color: #b71c1c;');
+                        }
+                    } catch (error) {
+                        showMessage('An error occurred during deletion.', 'background: #ffebee; color: #b71c1c;');
+                        console.error('Delete error:', error);
+                    }
+                });
             });
-        });
+
+            // Edit Post (Toggle Form)
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const postId = e.target.dataset.id;
+                    const editForm = document.getElementById(`edit-form-${postId}`);
+                    editForm.style.display = editForm.style.display === 'none' ? 'block' : 'none';
+                });
+            });
+
+            // Cancel Edit
+            document.querySelectorAll('.cancel-edit-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const postId = e.target.dataset.id;
+                    const editForm = document.getElementById(`edit-form-${postId}`);
+                    editForm.style.display = 'none';
+                });
+            });
+
+            // Handle Edit Form Submission
+            document.querySelectorAll('.edit-form form').forEach(form => {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const postId = e.target.id.split('-')[2]; // Extract post ID from form ID
+                    const formData = new FormData(e.target);
+                    const userName = localStorage.getItem("user_name");
+
+                    try {
+                        const response = await fetch(`http://localhost:5000/${postId}/edit`, {
+                            method: 'PUT',
+                            body: formData,
+                            credentials: 'include'
+                        });
+                        const result = await response.json();
+                        if (response.ok) {
+                            showMessage(result.message, 'background: #e6f9e6; color: #006400;');
+                            fetchPosts(); // Refresh posts after edit
+                        } else {
+                            showMessage(result.message || 'Failed to update post.', 'background: #ffebee; color: #b71c1c;');
+                        }
+                    } catch (error) {
+                        showMessage('An error occurred during update.', 'background: #ffebee; color: #b71c1c;');
+                        console.error('Edit error:', error);
+                    }
+                });
+            });
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
-            const logoutLink = document.querySelector('nav a[href="/logout"]');
+            fetchPosts(); // Initial fetch on page load
+
+            // Update navigation links on load
+            const userName = localStorage.getItem("user_name");
+            if (userName) {
+                document.getElementById('dashboardLink').href = `/${userName}/dashboard`;
+                document.getElementById('historyLink').href = `/${userName}/history`;
+                document.getElementById('registerLink').href = `/`;
+            }
+
+            // Handle Logout
+            const logoutLink = document.getElementById('logoutLink');
             if (logoutLink) {
                 logoutLink.addEventListener('click', async (e) => {
-                    e.preventDefault(); // Prevent default link behavior
+                    e.preventDefault();
                     try {
-                        const response = await fetch('http://127.0.0.1:5000/logout', {
+                        const response = await fetch('http://localhost:5000/logout', {
                             method: 'POST',
                             credentials: 'include'
                         });
                         const data = await response.json();
                         if (response.ok) {
                             alert(data.message);
-                            window.location.href = 'http://127.0.0.1:5000/login';
+                            localStorage.removeItem("user_name"); // Clear stored username
+                            window.location.href = 'http://localhost:5000/login';
                         } else {
                             alert(data.message || 'Logout failed.');
                         }
@@ -100,6 +266,9 @@
                     }
                 });
             }
+
+            // Optional: Periodically refresh history to see task status updates
+            // setInterval(fetchPosts, 30000); // Refresh every 30 seconds
         });
     </script>
 </body>

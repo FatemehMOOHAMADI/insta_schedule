@@ -140,7 +140,8 @@ class UserLogin(Resource):
         response = make_response({
             "message": "you are logged in",
             "access_token": access_token,
-            "user_id": user.id
+            "user_id": user.id,
+            "user_name": user.user_name,
         }, 200)
 
         # Set cookies if needed
