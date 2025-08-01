@@ -17,19 +17,23 @@
 </head>
 <body>
     <h1>Your Scheduled Posts</h1>
-    
+
     <nav>
-        <a href="/" id="registerLink">Register</a> |
-        <a href="/logout" id="logoutLink">Logout</a> |
-        <a href="#" id="dashboardLink">Schedule New Post</a> | 
-        <a href="#" id="historyLink">View History</a>
+        <a href="http://localhost:5500/register.html" id="registerLink">Register</a> |
+        <a href="#" id="logoutLink">Logout</a> |
+        <a href="http://localhost:5500/dashboard.html" id="dashboardLink">Schedule New Post</a> |
+        <a href="http://localhost:5500/history.html" id="historyLink">View History</a>
     </nav>
-    
+
     <div id="message" style="display: none;"></div>
-    
+
     <div id="posts-container">
         <p>Loading your post history...</p>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
 
     <script>
         // Helper function to show messages
@@ -37,7 +41,7 @@
             const messageDiv = document.getElementById('message');
             messageDiv.textContent = text;
             messageDiv.style = `display: block; padding: 1rem; margin: 1rem 0; border-radius: 4px; ${style}`;
-            
+
             // Hide message after 5 seconds
             setTimeout(() => {
                 messageDiv.style.display = 'none';
@@ -49,12 +53,14 @@
             if (!userName) {
                 showMessage('You are not logged in. Redirecting to login...', 'background: #ffebee; color: #b71c1c;');
                 document.getElementById('posts-container').innerHTML = '<p>Please log in to view your post history.</p>';
-                setTimeout(() => { window.location.href = 'http://localhost:5000/login'; }, 1500);
+                // FIX: Redirect to frontend login page
+                setTimeout(() => { window.location.href = 'http://localhost:5500/login.html'; }, 1500);
                 return;
             }
 
             try {
-                const response = await fetch(`http://localhost:5000/${userName}/history`, { // Corrected URL
+                // Backend API call for fetching history
+                const response = await fetch(`http://localhost:5000/${userName}/history`, {
                     headers: { 'Accept': 'application/json' },
                     credentials: "include",
                 });
@@ -95,7 +101,7 @@
                         <p><strong>Status:</strong> <span class="${statusClass}">${post.status} (${post.task_status || 'N/A'})</span></p>
                         ${post.error ? `<p style="color: red;"><strong>Error:</strong> ${post.error}</p>` : ''}
                         ${post.instagram_post_id ? `<p><strong>Instagram Post ID:</strong> ${post.instagram_post_id}</p>` : ''}
-                        ${post.path ? `<img src="/static/${post.path}" alt="Post Image" class="post-image">` : ''}
+                        ${post.path ? `<img src="http://localhost:5000/static/${post.path}" alt="Post Image" class="post-image">` : ''}
                         <div class="actions">
                             <button class="delete-btn" data-id="${post.id}">Delete</button>
                             <button class="edit-btn" data-id="${post.id}">Edit</button>
@@ -105,7 +111,7 @@
                             <form id="editPostForm-${post.id}" enctype="multipart/form-data">
                                 <label for="edit-image-${post.id}">Change Image (optional)</label>
                                 <input type="file" id="edit-image-${post.id}" name="photo" accept="image/png, image/jpeg, image/jpg, image/gif">
-                                <img id="edit-preview-${post.id}" src="/static/${post.path}" alt="Current Image" style="max-width: 150px; max-height: 150px; ${post.path ? 'display: block;' : 'display: none;'} margin-top: 0.5rem;">
+                                <img id="edit-preview-${post.id}" src="http://localhost:5000/static/${post.path}" alt="Current Image" style="max-width: 150px; max-height: 150px; ${post.path ? 'display: block;' : 'display: none;'} margin-top: 0.5rem;">
 
                                 <label for="edit-caption-${post.id}">New Caption</label>
                                 <textarea id="edit-caption-${post.id}" name="caption">${post.caption || ''}</textarea>
@@ -115,7 +121,7 @@
 
                                 <label for="edit-schedule-time-${post.id}">New Schedule Time</label>
                                 <input type="time" id="edit-schedule-time-${post.id}" name="schedule_time" value="${post.jalali_scheduled ? post.jalali_scheduled.split(' ')[1] : ''}">
-                                
+
                                 <button type="submit">Save Changes</button>
                                 <button type="button" class="cancel-edit-btn" data-id="${post.id}">Cancel</button>
                             </form>
@@ -123,7 +129,7 @@
                     `;
                     postsContainer.appendChild(postCard);
 
-                    // Initialize datepicker for edit form
+                    // Initialize datepicker for edit form (needs to be done after element is in DOM)
                     $(`#edit-jalali-date-${post.id}`).pDatepicker({
                         format: "YYYY-MM-DD",
                         autoClose: true,
@@ -143,7 +149,7 @@
                             reader.readAsDataURL(file);
                         } else {
                             // If user clears selection, revert to existing image or hide
-                            preview.src = `/static/${post.path}`; // Revert to original
+                            preview.src = `http://localhost:5000/static/${post.path}`; // Revert to original
                             if (!post.path) preview.style.display = 'none';
                         }
                     });
@@ -189,6 +195,7 @@
                 button.addEventListener('click', (e) => {
                     const postId = e.target.dataset.id;
                     const editForm = document.getElementById(`edit-form-${postId}`);
+                    // Toggle visibility
                     editForm.style.display = editForm.style.display === 'none' ? 'block' : 'none';
                 });
             });
@@ -208,17 +215,18 @@
                     e.preventDefault();
                     const postId = e.target.id.split('-')[2]; // Extract post ID from form ID
                     const formData = new FormData(e.target);
-                    const userName = localStorage.getItem("user_name");
+                    // No need for userName here as the endpoint is post-ID based
 
                     try {
                         const response = await fetch(`http://localhost:5000/${postId}/edit`, {
-                            method: 'PUT',
+                            method: 'PUT', // or POST depending on your backend API for edits
                             body: formData,
                             credentials: 'include'
                         });
                         const result = await response.json();
                         if (response.ok) {
                             showMessage(result.message, 'background: #e6f9e6; color: #006400;');
+                            document.getElementById(`edit-form-${postId}`).style.display = 'none'; // Hide form on success
                             fetchPosts(); // Refresh posts after edit
                         } else {
                             showMessage(result.message || 'Failed to update post.', 'background: #ffebee; color: #b71c1c;');
@@ -234,14 +242,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             fetchPosts(); // Initial fetch on page load
 
-            // Update navigation links on load
-            const userName = localStorage.getItem("user_name");
-            if (userName) {
-                document.getElementById('dashboardLink').href = `/${userName}/dashboard`;
-                document.getElementById('historyLink').href = `/${userName}/history`;
-                document.getElementById('registerLink').href = `/`;
-            }
-
             // Handle Logout
             const logoutLink = document.getElementById('logoutLink');
             if (logoutLink) {
@@ -256,7 +256,8 @@
                         if (response.ok) {
                             alert(data.message);
                             localStorage.removeItem("user_name"); // Clear stored username
-                            window.location.href = 'http://localhost:5000/login';
+                            // FIX: Redirect to frontend login page
+                            window.location.href = 'http://localhost:5500/login.html';
                         } else {
                             alert(data.message || 'Logout failed.');
                         }

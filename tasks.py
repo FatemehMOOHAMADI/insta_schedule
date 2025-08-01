@@ -53,32 +53,3 @@ def upload_to_instagram(self, relative_path_image, caption, username, password):
     except Exception as e:
         logger.error(f"the uploading failed {str(e)}")
         raise self.retry(exc=e, countdown=60)
-
-
-@celery.task(bind=True, retry=3, retry_backoff=True)
-def delete_instagram_post(self, media_id, username, password):
-    try:
-        client = _get_instagram_client(username, password)
-
-        success = client.media_delete(media_id=media_id)
-
-        if success:
-            logger.info(f"Successfully deleted media {media_id} for {username}")
-            return {
-                "success": True,
-                "message": "Instagram post deleted successfully",
-                "media_id": media_id,
-                "username": username,
-            }
-        else:
-            logger.warning(f"Failed to delete media {media_id} for {username}: Method returned false.")
-            return {
-                "success": False,
-                "message": "Failed to delete Instagram post",
-                "media_id": media_id,
-                "username": username,
-            }
-
-    except Exception as e:
-        logger.error(f"Failed to delete Instagram post for media {media_id} ({username}): {str(e)}")
-        raise self.retry(exc=e, countdown=60)

@@ -62,7 +62,7 @@
             };
             
             try {
-                const response = await fetch('http://localhost:5000/', {
+                const response = await fetch('http://localhost:5000/register', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -74,7 +74,7 @@
                 
                 if (response.status === 201) {
                     alert('Registration successful!');
-                    window.location.href = 'http://127.0.0.1:5000/login';
+                    window.location.href = 'http://localhost:5500/login.html';
                 } else {
                     // Handle errors
                     if (data.message.includes('user_name')) {

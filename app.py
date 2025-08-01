@@ -3,7 +3,7 @@ from config import (app, db, Resource, api, request, create_access_token, jwt_re
                     make_response, send_file, tehran, os, get_jwt_identity, jsonify)
 from models import Users, generate_password_hash, check_password_hash, Post_insta
 from flask_jwt_extended import unset_jwt_cookies
-from tasks import upload_to_instagram, delete_instagram_post
+from tasks import upload_to_instagram
 from datetime import datetime
 from celery_worker import celery
 from werkzeug.utils import secure_filename
@@ -361,13 +361,6 @@ class UserPostDelete(Resource):
                 celery.control.revoke(post_to_delete.task_id, terminate=True)
                 app.logger.info(f"Revoke Celery task {post_to_delete.task_id} for delete post {post_id}")
 
-            if post_to_delete.status == "success" and post_to_delete.instagram_post_id:
-                delete_instagram_post.apply_async(
-                    args=[post_to_delete.instagram_post_id, current_user_obj.username_insta,
-                          current_user_obj.password_insta]
-                )
-                app.logger.info(f"Scheduled deletion of Instagram post {post_to_delete.instagram_post_id}.")
-
             db.session.delete(post_to_delete)
             db.session.commit()
 
@@ -401,16 +394,19 @@ class UserPostEdit(Resource):
         if not post_to_edit:
             return {"message": "no post found to edit"}, 403
 
+        if post_to_edit.status != "scheduled":
+            return {"message": f"the satus of post is '{post_to_edit.status}'."}, 400
+
         data = request.form
         file = request.files.get("photo")
 
         needs_reschedule = False
-        old_instagram_post_id = None
 
-        if file and allowed_file(file.filename):
-            if post_to_edit.path and os.path.exists(os.path.join(app.static_folder, post_to_edit.path)):
-                os.remove(os.path.join(app.static_folder, post_to_edit.path))
-                app.logger.info(f"Removed old image: {post_to_edit.path}")
+        if file:
+            if allowed_file(file.filename):
+                if post_to_edit.path and os.path.exists(os.path.join(app.static_folder, post_to_edit.path)):
+                    os.remove(os.path.join(app.static_folder, post_to_edit.path))
+                    app.logger.info(f"Removed old image: {post_to_edit.path}")
 
             filename = secure_filename(file.filename)
             upload_folder = os.path.join(app.static_folder, 'uploads')
@@ -427,11 +423,12 @@ class UserPostEdit(Resource):
             except Exception as e:
                 return {"message": f"error saving the edited photo: {str(e)}"}, 400
 
-        elif file:  # file exists but not allowed
+        else:
             return {"message": "Invalid file type for photo"}, 400
 
-        if "caption" in data and data["caption"] is not None and data["caption"] != post_to_edit.caption:
-            post_to_edit.caption = data["caption"]
+        new_caption = data.get("caption")
+        if new_caption is not None and new_caption != post_to_edit.caption:
+            post_to_edit.caption = new_caption
             needs_reschedule = True
 
         jalali_date = data.get("jalali_date")
@@ -451,18 +448,9 @@ class UserPostEdit(Resource):
 
         try:
             if needs_reschedule:
-                if post_to_edit.task_id and post_to_edit.status == "scheduled":
+                if post_to_edit.task_id:
                     celery.control.revoke(post_to_edit.task_id, terminate=True)
                     app.logger.info(f"Revoked old Celery task {post_to_edit.task_id} for post {post_id}")
-
-                if post_to_edit.status == "success" and post_to_edit.instagram_post_id:
-                    old_instagram_post_id = post_to_edit.instagram_post_id
-                    delete_instagram_post.apply_async(
-                        args=[old_instagram_post_id, current_user_obj.username_insta, current_user_obj.password_insta]
-                    )
-                    app.logger.info(
-                        f"Scheduled deletion of old Instagram post {old_instagram_post_id} for post {post_id}.")
-                    post_to_edit.instagram_post_id = None  # Clear old Instagram ID
 
                 # Schedule a new upload task
                 if post_to_edit.path and post_to_edit.caption and post_to_edit.schedule_time:
