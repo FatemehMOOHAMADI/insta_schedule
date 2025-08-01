@@ -14,6 +14,9 @@
         .actions button { margin-right: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
         .edit-form { margin-top: 1rem; border-top: 1px dashed #ccc; padding-top: 1rem; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
 </head>
 <body>
     <h1>Your Scheduled Posts</h1>
@@ -31,9 +34,6 @@
         <p>Loading your post history...</p>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
 
     <script>
         // Helper function to show messages
@@ -54,12 +54,13 @@
                 showMessage('You are not logged in. Redirecting to login...', 'background: #ffebee; color: #b71c1c;');
                 document.getElementById('posts-container').innerHTML = '<p>Please log in to view your post history.</p>';
                 // FIX: Redirect to frontend login page
-                setTimeout(() => { window.location.href = 'http://localhost:5500/login.html'; }, 1500);
+                setTimeout(() => { 
+                    window.location.href = 'http://localhost:5500/login.html?next=history.html'; 
+                }, 1500);
                 return;
             }
 
             try {
-                // Backend API call for fetching history
                 const response = await fetch(`http://localhost:5000/${userName}/history`, {
                     headers: { 'Accept': 'application/json' },
                     credentials: "include",

@@ -76,10 +76,12 @@
                 // CRITICAL FIX: Store the user_name from the response
                 localStorage.setItem("user_name", data.user_name); 
     
-                // Redirect to the user's specific dashboard URL
-                setTimeout(() => {
-                    window.location.href = `http://localhost:5500/dashboard.html?user=${data.user_name}`;
-                }, 1500); // Delay for message to be seen
+                const urlParams = new URLSearchParams(window.location.search);
+                    const nextUrl = urlParams.get('next') ? urlParams.get('next') : 'dashboard.html';
+
+                    setTimeout(() => {
+                        window.location.href = `http://localhost:5500/${nextUrl}?user=${data.user_name}`;
+                    }, 1500);
             } else {
                 // Handle errors consistently using showMessage
                 if (data.message.includes('user name') || data.message.includes('user not found')) { // Adjusted message check

@@ -408,23 +408,23 @@ class UserPostEdit(Resource):
                     os.remove(os.path.join(app.static_folder, post_to_edit.path))
                     app.logger.info(f"Removed old image: {post_to_edit.path}")
 
-            filename = secure_filename(file.filename)
-            upload_folder = os.path.join(app.static_folder, 'uploads')
-            new_relative_path = os.path.join('uploads', filename)
-            new_full_path = os.path.join(app.static_folder, new_relative_path)
+                filename = secure_filename(file.filename)
+                upload_folder = os.path.join(app.static_folder, 'uploads')
+                new_relative_path = os.path.join('uploads', filename)
+                new_full_path = os.path.join(app.static_folder, new_relative_path)
 
-            try:
-                file.save(new_full_path)
-                post_to_edit.path = new_relative_path
-                needs_reschedule = True
+                try:
+                    file.save(new_full_path)
+                    post_to_edit.path = new_relative_path
+                    needs_reschedule = True
 
-                app.logger.info(f"new image saved for post {post_id}: {new_full_path}")
+                    app.logger.info(f"new image saved for post {post_id}: {new_full_path}")
 
-            except Exception as e:
-                return {"message": f"error saving the edited photo: {str(e)}"}, 400
+                except Exception as e:
+                    return {"message": f"error saving the edited photo: {str(e)}"}, 400
 
-        else:
-            return {"message": "Invalid file type for photo"}, 400
+            else:
+                return {"message": "Invalid file type for photo"}, 400
 
         new_caption = data.get("caption")
         if new_caption is not None and new_caption != post_to_edit.caption:
@@ -495,7 +495,6 @@ class UserLogout(Resource):
 api.add_resource(UserRegister, '/')
 api.add_resource(UserLogin, '/login')
 api.add_resource(UserLogout, '/logout')
-# api.add_resource(UserDashboard, '/dashboard')
 api.add_resource(UserDashboard, '/<string:user_name>/dashboard')
 api.add_resource(UserHistory, '/<string:user_name>/history')
 api.add_resource(UserPostDelete, '/<int:post_id>/delete')
