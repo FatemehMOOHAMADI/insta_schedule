@@ -379,10 +379,10 @@ class UserPostEdit(Resource):
     """
 
     method_decorators = {
-        'put': [jwt_required()]
+        'patch': [jwt_required()]
     }
 
-    def put(self, post_id):
+    def patch(self, post_id):
         user_id = get_jwt_identity()
         current_user_obj = Users.query.get(user_id)
 

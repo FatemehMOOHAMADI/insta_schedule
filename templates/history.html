@@ -24,7 +24,7 @@
     <nav>
         <a href="http://localhost:5500/register.html" id="registerLink">Register</a> |
         <a href="#" id="logoutLink">Logout</a> |
-        <a href="http://localhost:5500/dashboard.html"dashboardLink">Schedule New Post</a> |
+        <a href="http://localhost:5500/dashboard.html" id="dashboardLink">Schedule New Post</a> |
         <a href="http://localhost:5500/history.html" id="historyLink">View History</a>
     </nav>
 
@@ -218,7 +218,7 @@
 
                     try {
                         const response = await fetch(`http://localhost:5000/${postId}/edit`, {
-                            method: 'PUT', // or POST depending on your backend API for edits
+                            method: 'PATCH',
                             body: formData,
                             credentials: 'include'
                         });
