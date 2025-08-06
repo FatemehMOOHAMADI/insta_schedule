@@ -102,6 +102,12 @@
             document.getElementById('postForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
 
+                const userName = localStorage.getItem("user_name");
+                if (!userName) {
+                    showMessage('You are not logged in', 'background: #ffebee; color: #b71c1c;');
+                    return;
+                }
+
                 const formData = new FormData(this);
 
                 try {

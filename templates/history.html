@@ -14,9 +14,6 @@
         .actions button { margin-right: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
         .edit-form { margin-top: 1rem; border-top: 1px dashed #ccc; padding-top: 1rem; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
 </head>
 <body>
     <h1>Your Scheduled Posts</h1>
@@ -230,6 +227,10 @@
                         } else {
                             showMessage(result.message || 'Failed to update post.', 'background: #ffebee; color: #b71c1c;');
                         }
+                        
+                        document.getElementById(`edit-form-${postId}`).style.display = 'none';
+                        
+                        fetchPosts();
                     } catch (error) {
                         showMessage('An error occurred during update.', 'background: #ffebee; color: #b71c1c;');
                         console.error('Edit error:', error);

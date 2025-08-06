@@ -1,6 +1,6 @@
 from flask_jwt_extended.exceptions import JWTExtendedException
 from config import (app, db, Resource, api, request, create_access_token, jwt_required,
-                    make_response, send_file, tehran, os, get_jwt_identity, jsonify)
+                    make_response, tehran, os, get_jwt_identity, jsonify)
 from models import Users, generate_password_hash, check_password_hash, Post_insta
 from flask_jwt_extended import unset_jwt_cookies
 from tasks import upload_to_instagram
@@ -293,18 +293,18 @@ class UserHistory(Resource):
                         post.status = "success"
                         if isinstance(task.result, dict) and "post_id" in task.result:
                             post.instagram_post_id = str(task.result.get("post_id"))
-                    else:
+                    elif task.failed():
                         post.status = "failed"
                         current_post_error = str(task.result)
 
                     post_status_updated = True
 
-                if post_status_updated:
-                    try:
-                        db.session.commit()
-                    except Exception as e:
-                        app.logger.info(f"error committing post status update for post {post.id}: {str(e)}")
-                        db.session.rollback()
+            if post_status_updated:
+                try:
+                    db.session.commit()
+                except Exception as e:
+                    app.logger.info(f"error committing post status update for post {post.id}: {str(e)}")
+                    db.session.rollback()
 
             post_data = post.to_json()
 
