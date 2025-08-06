@@ -1,5 +1,5 @@
 from celery_worker import celery
-from instagrapi import Client
+import instagrapi
 from config import os
 import logging
 
@@ -20,7 +20,7 @@ def upload_to_instagram(self, relative_path_image, caption, username, password):
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Image file not found at {abs_path}")
 
-        client = Client()
+        client = instagrapi.Client()
 
         session_dir = f"sessions"
         os.makedirs(session_dir, exist_ok=True)
@@ -47,6 +47,10 @@ def upload_to_instagram(self, relative_path_image, caption, username, password):
             "username": username,
         }
 
+    except instagrapi.exceptions.LoginRequired as e:
+        logger.error(f"Login failed for {username}: {str(e)}")
+        # Do not retry for a login error, as it's a permanent issue
+        raise e
     except Exception as e:
         logger.error(f"the uploading failed {str(e)}")
         raise self.retry(exc=e, countdown=60)

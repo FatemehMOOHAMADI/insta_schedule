@@ -14,6 +14,13 @@
         .actions button { margin-right: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
         .edit-form { margin-top: 1rem; border-top: 1px dashed #ccc; padding-top: 1rem; }
     </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+
 </head>
 <body>
     <h1>Your Scheduled Posts</h1>
@@ -209,9 +216,14 @@
             document.querySelectorAll('.edit-form form').forEach(form => {
                 form.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    const postId = e.target.id.split('-')[2]; // Extract post ID from form ID
+                    const postId = e.target.closest('.post-card').dataset.postId; 
+        
+                    if (!postId) {
+                        showMessage('Error: Could not find post ID.', 'background: #ffebee; color: #b71c1c;');
+                        return;
+                    }
+
                     const formData = new FormData(e.target);
-                    // No need for userName here as the endpoint is post-ID based
 
                     try {
                         const response = await fetch(`http://localhost:5000/${postId}/edit`, {

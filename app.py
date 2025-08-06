@@ -188,6 +188,9 @@ class UserDashboard(Resource):
         if not current_user_obj:
             return {"message": "user not FOUND!"}, 404
 
+        if current_user_obj.user_name != user_name:
+            return {"message": "Access denied, you are not the user"}, 403
+
         # receive the image
         if 'image' not in request.files:
             return {"message": "please upload photo"}, 400
@@ -404,9 +407,10 @@ class UserPostEdit(Resource):
 
         if file:
             if allowed_file(file.filename):
-                if post_to_edit.path and os.path.exists(os.path.join(app.static_folder, post_to_edit.path)):
-                    os.remove(os.path.join(app.static_folder, post_to_edit.path))
-                    app.logger.info(f"Removed old image: {post_to_edit.path}")
+                old_relative_path = post_to_edit.path
+                if old_relative_path and os.path.exists(os.path.join(app.static_folder, old_relative_path)):
+                    os.remove(os.path.join(app.static_folder, old_relative_path))
+                    app.logger.info(f"Removed old image: {old_relative_path}")
 
                 filename = secure_filename(file.filename)
                 upload_folder = os.path.join(app.static_folder, 'uploads')
