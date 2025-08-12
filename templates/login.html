@@ -80,7 +80,7 @@
                     const nextUrl = urlParams.get('next') ? urlParams.get('next') : 'dashboard.html';
 
                     setTimeout(() => {
-                        window.location.href = `http://localhost:5500/${nextUrl}?user=${data.user_name}`;
+                        window.location.href = `http://localhost:5500/${nextUrl}`;
                     }, 1500);
             } else {
                 // Handle errors consistently using showMessage

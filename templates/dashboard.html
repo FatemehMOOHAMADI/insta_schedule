@@ -65,19 +65,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            const userName = localStorage.getItem("user_name");
-
-            if (!userName) {
-                showMessage('You are not logged in. Redirecting to login...', 'background: #ffebee; color: #b71c1c;');
-                setTimeout(() => { window.location.href = 'http://localhost:5500/login.html'; }, 1500);
-                return;
-            }
-
-            const historyLink = document.getElementById('historyLink');
-            if (userName && historyLink) {
-                historyLink.href = `http://localhost:5500/history.html?user=${userName}`;
-            }
-
 
             // Display image preview when file is selected
             document.getElementById('image').addEventListener('change', function(e) {
@@ -102,16 +89,10 @@
             document.getElementById('postForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
 
-                const userName = localStorage.getItem("user_name");
-                if (!userName) {
-                    showMessage('You are not logged in', 'background: #ffebee; color: #b71c1c;');
-                    return;
-                }
-
                 const formData = new FormData(this);
 
                 try {
-                    const response = await fetch(`http://localhost:5000/${userName}/dashboard`, {
+                    const response = await fetch(`http://localhost:5000/dashboard`, {
                         method: 'POST',
                         body: formData,
                         credentials: "include"
@@ -121,10 +102,6 @@
 
                     if (response.ok) {
                         let successMsg = result.message;
-                        // Check if result.jalali_scheduled exists before trying to append it
-                        if (result.jalali_scheduled) {
-                            successMsg += ` for ${result.jalali_scheduled}`;
-                        }
                         showMessage(successMsg, 'background: #e6f9e6; color: #006400;');
 
                         // Reset form on success
@@ -133,7 +110,7 @@
 
                         // FIX: Redirect to frontend history page after successful post
                         setTimeout(() => {
-                            window.location.href = `http://localhost:5500/history.html?user=${userName}`;
+                            window.location.href = `http://localhost:5500/history.html`;
                         }, 1500);
 
                     } else {
@@ -168,7 +145,6 @@
                         const data = await response.json();
                         if (response.ok) {
                             alert(data.message);
-                            localStorage.removeItem("user_name"); // Clear stored username on logout
                             // FIX: Redirect to frontend login page
                             window.location.href = 'http://localhost:5500/login.html';
                         } else {

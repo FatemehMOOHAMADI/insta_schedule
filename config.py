@@ -25,7 +25,7 @@ CORS(app, supports_credentials=True, resources={
             "http://127.0.0.1:5500",
             "http://127.0.0.1:5000",
         ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })

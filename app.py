@@ -167,29 +167,23 @@ class UserDashboard(Resource):
         'post': [jwt_required()],
     }
 
-    def get(self, user_name):
+    def get(self):
         current_user_id = get_jwt_identity()
         current_user_obj = Users.query.get(current_user_id)
 
         if not current_user_obj:
             return {"message": "user not FOUND!"}, 404
 
-        if current_user_obj.user_name != user_name:
-            return {"message": "Access denied, you are not the user"}, 403
-
         app.logger.info("GET request to UserDashboard. Instructing to use POST for actions.")
         return {"message": "access dashboard"}, 200
 
-    def post(self, user_name):
+    def post(self):
 
         user_id = get_jwt_identity()
         current_user_obj = Users.query.get(user_id)
 
         if not current_user_obj:
             return {"message": "user not FOUND!"}, 404
-
-        if current_user_obj.user_name != user_name:
-            return {"message": "Access denied, you are not the user"}, 403
 
         # receive the image
         if 'image' not in request.files:
@@ -267,7 +261,7 @@ class UserHistory(Resource):
         'get': [jwt_required()],
     }
 
-    def get(self, user_name):
+    def get(self):
 
         # identify the user
         user_id = get_jwt_identity()
@@ -283,7 +277,7 @@ class UserHistory(Resource):
         posts_data = []
         for post in user_posts:
 
-            current_post_error = None
+            post_data = post.to_json()
             post_status_updated = False
 
             # Check Celery task status if task_id exists
@@ -294,8 +288,7 @@ class UserHistory(Resource):
                 if task.ready():
                     if task.successful():
                         post.status = "success"
-                        if isinstance(task.result, dict) and "post_id" in task.result:
-                            post.instagram_post_id = str(task.result.get("post_id"))
+                        post.instagram_post_id = str(task.result.get("post_id")) if isinstance(task.result, dict) else None
                     elif task.failed():
                         post.status = "failed"
                         current_post_error = str(task.result)
@@ -309,23 +302,10 @@ class UserHistory(Resource):
                     app.logger.info(f"error committing post status update for post {post.id}: {str(e)}")
                     db.session.rollback()
 
-            post_data = post.to_json()
-
-            # show the status of each task
-            if post.task_id:
-                task = celery.AsyncResult(post.task_id)
-                post_data["task_status"] = task.status
-
-                if current_post_error == "failed":
-                    post_data["error"] = current_post_error
-
-                elif task.failed():
-                    post_data["error"] = str(task.result)
-
-            # display the time according to tehran timezone
-            schedule_time = post.schedule_time.astimezone(tehran)
-            jalali_datetime = jdatetime.datetime.fromgregorian(datetime=schedule_time)
-            post_data["jalali_scheduled"] = jalali_datetime.strftime("%Y-%m-%d %H:%M")
+            if post.schedule_time:
+                schedule_time = post.schedule_time.astimezone(tehran)
+                jalali_datetime = jdatetime.datetime.fromgregorian(datetime=schedule_time)
+                post_data["jalali_scheduled"] = jalali_datetime.strftime("%Y-%m-%d %H:%M")
 
             posts_data.append(post_data)
 
@@ -403,11 +383,12 @@ class UserPostEdit(Resource):
         data = request.form
         file = request.files.get("photo")
 
+        old_relative_path = post_to_edit.path
+
         needs_reschedule = False
 
         if file:
             if allowed_file(file.filename):
-                old_relative_path = post_to_edit.path
                 if old_relative_path and os.path.exists(os.path.join(app.static_folder, old_relative_path)):
                     os.remove(os.path.join(app.static_folder, old_relative_path))
                     app.logger.info(f"Removed old image: {old_relative_path}")
@@ -499,10 +480,10 @@ class UserLogout(Resource):
 api.add_resource(UserRegister, '/')
 api.add_resource(UserLogin, '/login')
 api.add_resource(UserLogout, '/logout')
-api.add_resource(UserDashboard, '/<string:user_name>/dashboard')
-api.add_resource(UserHistory, '/<string:user_name>/history')
-api.add_resource(UserPostDelete, '/<int:post_id>/delete')
-api.add_resource(UserPostEdit, '/<int:post_id>/edit')
+api.add_resource(UserDashboard, '/dashboard')
+api.add_resource(UserHistory, '/history')
+api.add_resource(UserPostDelete, '/post/<int:post_id>/delete')
+api.add_resource(UserPostEdit, '/post/<int:post_id>/edit')
 
 
 @app.errorhandler(JWTExtendedException)
